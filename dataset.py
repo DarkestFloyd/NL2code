@@ -3,19 +3,37 @@ import copy
 
 import nltk
 from collections import OrderedDict, defaultdict
+from query_grammar import QueryParser
 import logging
 import collections
 import numpy as np
 import string
 import re
 import astor
+import math
+
+# import multiprocessing
+import multiprocessing as mp
+
 from itertools import chain
 
 from nn.utils.io_utils import serialize_to_file, deserialize_from_file
+from file_utils import file_contents
 
 import config
 from lang.py.parse import get_grammar
 from lang.py.unaryclosure import get_top_unary_closures, apply_unary_closures
+
+# define dataset files
+ALLANNO   = "./en-django/all.anno"
+ALLCODE   = "./en-django/all.code"
+TRAINANNO = "./en-django/train.anno"
+DEVANNO   = "./en-django/dev.anno"
+TESTANNO  = "./en-django/test.anno"
+#GENALLANNO = "./gendata/pycin_all.anno"
+#GENALLCODE = "./gendata/pycin_all.code"
+GENALLANNO = "./gendata/all.anno"
+GENALLCODE = "./gendata/all.code"
 
 # define actions
 APPLY_RULE = 0
@@ -157,13 +175,15 @@ class DataEntry:
 
 
 class DataSet:
-    def __init__(self, annot_vocab, terminal_vocab, grammar, name='train_data'):
+    def __init__(self, annot_vocab, terminal_vocab, grammar, name='train_data', phrase_vocab = None, pos_vocab = None):
         self.annot_vocab = annot_vocab
         self.terminal_vocab = terminal_vocab
         self.name = name
         self.examples = []
         self.data_matrix = dict()
         self.grammar = grammar
+        self.phrase_vocab = phrase_vocab
+        self.pos_vocab    = pos_vocab
 
     def add(self, example):
         example.eid = len(self.examples)
@@ -197,7 +217,8 @@ class DataSet:
 
     def get_prob_func_inputs(self, ids):
         order = ['query_tokens', 'tgt_action_seq', 'tgt_action_seq_type',
-                 'tgt_node_seq', 'tgt_par_rule_seq', 'tgt_par_t_seq']
+                 'tgt_node_seq', 'tgt_par_rule_seq', 'tgt_par_t_seq',
+                 'query_tokens_phrase', 'query_tokens_pos']
 
         max_src_seq_len = max(len(self.examples[i].query) for i in ids)
         max_tgt_seq_len = max(len(self.examples[i].actions) for i in ids)
@@ -209,52 +230,95 @@ class DataSet:
         for entry in order:
             if entry == 'query_tokens':
                 data.append(self.data_matrix[entry][ids, :max_src_seq_len])
+            elif entry == 'query_tokens_phrase':
+                data.append(self.data_matrix[entry][ids, :max_src_seq_len])
+            elif entry == 'query_tokens_pos':
+                data.append(self.data_matrix[entry][ids, :max_src_seq_len])
             else:
                 data.append(self.data_matrix[entry][ids, :max_tgt_seq_len])
 
-        return data
+        # parsed = []
+        # parsed.apped(self.data_matrix['query_tokens_phrase'][ids, :max_src_seq_len])
+        # parsed.apped(self.data_matrix['query_tokens_pos'][ids, :max_src_seq_len])
+
+        return data#, parsed
 
 
     def init_data_matrices(self, max_query_length=70, max_example_action_num=100):
+
         logging.info('init data matrices for [%s] dataset', self.name)
         annot_vocab = self.annot_vocab
         terminal_vocab = self.terminal_vocab
 
+        phrase_vocab = self.phrase_vocab
+        pos_vocab    = self.pos_vocab
+
+        # figure out unique ids for phrase and pos vocab
+        phrase_vocab_uid = {}
+        pos_vocab_uid    = {}
+
+        # fill phrase_vocab unique id
+        for idx, pv in enumerate(phrase_vocab):
+            assert (phrase_vocab_uid.get(pv) is None)
+            phrase_vocab_uid[pv] = idx
+        # fill pos vocab unique id
+        for idx, posv in enumerate(pos_vocab):
+            assert (pos_vocab_uid.get(posv) is None)
+            pos_vocab_uid[posv] = idx
+
         # np.max([len(e.query) for e in self.examples])
         # np.max([len(e.rules) for e in self.examples])
 
-        query_tokens = self.data_matrix['query_tokens'] = np.zeros((self.count, max_query_length), dtype='int32')
+        query_tokens        = self.data_matrix['query_tokens'] = np.zeros((self.count, max_query_length), dtype='int32')
+        query_tokens_phrase = self.data_matrix['query_tokens_phrase'] = np.zeros((self.count, max_query_length), dtype='float32')
+        query_tokens_pos    = self.data_matrix['query_tokens_pos'] = np.zeros((self.count, max_query_length), dtype='float32')
+
         tgt_node_seq = self.data_matrix['tgt_node_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
         tgt_par_rule_seq = self.data_matrix['tgt_par_rule_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
         tgt_par_t_seq = self.data_matrix['tgt_par_t_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
         tgt_action_seq = self.data_matrix['tgt_action_seq'] = np.zeros((self.count, max_example_action_num, 3), dtype='int32')
         tgt_action_seq_type = self.data_matrix['tgt_action_seq_type'] = np.zeros((self.count, max_example_action_num, 3), dtype='int32')
-
         for eid, example in enumerate(self.examples):
+
             exg_query_tokens = example.query[:max_query_length]
+            exg_query_tokens_phrase = example.meta_data['phrase'][:max_query_length]
+            exg_query_tokens_pos    = example.meta_data['pos'][:max_query_length]
             exg_action_seq = example.actions[:max_example_action_num]
 
             for tid, token in enumerate(exg_query_tokens):
                 token_id = annot_vocab[token]
-
                 query_tokens[eid, tid] = token_id
+
+            for tid, p in enumerate(exg_query_tokens_phrase):
+                assert (phrase_vocab_uid.get(p) is not None)
+                phrase_id = phrase_vocab_uid[p]
+                query_tokens_phrase[eid, tid] = phrase_id
+
+            for tid, pos in enumerate(exg_query_tokens_pos):
+                assert (pos_vocab_uid.get(pos) is not None)
+                pos_id = pos_vocab_uid[pos]
+                query_tokens_pos[eid, tid] = pos_id
 
             assert len(exg_action_seq) > 0
 
             for t, action in enumerate(exg_action_seq):
+
                 if action.act_type == APPLY_RULE:
                     rule = action.data['rule']
                     tgt_action_seq[eid, t, 0] = self.grammar.rule_to_id[rule]
                     tgt_action_seq_type[eid, t, 0] = 1
+
                 elif action.act_type == GEN_TOKEN:
                     token = action.data['literal']
                     token_id = terminal_vocab[token]
                     tgt_action_seq[eid, t, 1] = token_id
                     tgt_action_seq_type[eid, t, 1] = 1
+
                 elif action.act_type == COPY_TOKEN:
                     src_token_idx = action.data['source_idx']
                     tgt_action_seq[eid, t, 2] = src_token_idx
                     tgt_action_seq_type[eid, t, 2] = 1
+
                 elif action.act_type == GEN_COPY_TOKEN:
                     token = action.data['literal']
                     token_id = terminal_vocab[token]
@@ -293,11 +357,13 @@ class DataHelper(object):
 def parse_django_dataset_nt_only():
     from parse import parse_django
 
-    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+    #annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+    annot_file = ALLANNO
 
     vocab = gen_vocab(annot_file, vocab_size=4500)
 
-    code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
+    #code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
+    code_file = ALLCODE
 
     grammar, all_parse_trees = parse_django(code_file)
 
@@ -307,7 +373,8 @@ def parse_django_dataset_nt_only():
 
     # train_data
 
-    train_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/train.anno'
+    #train_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/train.anno'
+    train_annot_file = TRAINANNO
     train_parse_trees = all_parse_trees[0:16000]
     for line, parse_tree in zip(open(train_annot_file), train_parse_trees):
         if parse_tree.is_leaf:
@@ -323,7 +390,8 @@ def parse_django_dataset_nt_only():
 
     # dev_data
 
-    dev_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/dev.anno'
+    #dev_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/dev.anno'
+    dev_annot_file = DEVANNO
     dev_parse_trees = all_parse_trees[16000:17000]
     for line, parse_tree in zip(open(dev_annot_file), dev_parse_trees):
         if parse_tree.is_leaf:
@@ -339,7 +407,8 @@ def parse_django_dataset_nt_only():
 
     # test_data
 
-    test_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/test.anno'
+    #test_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/test.anno'
+    test_annot_file = TESTANNO
     test_parse_trees = all_parse_trees[17000:18805]
     for line, parse_tree in zip(open(test_annot_file), test_parse_trees):
         if parse_tree.is_leaf:
@@ -356,16 +425,46 @@ def parse_django_dataset_nt_only():
     serialize_to_file((train_data, dev_data, test_data), 'django.typed_rule.bin')
 
 
+def gen_phrase_vocab(data):
+
+    all_phrase = []
+
+    for entry in data:
+
+        phrase = entry['phrase']
+
+        all_phrase = all_phrase + phrase
+
+    return list(set(all_phrase))
+
+def gen_pos_vocab(data):
+
+    all_pos = []
+
+    for entry in data:
+
+        pos = entry['pos']
+
+        all_pos = all_pos + pos
+
+    return list(set(all_pos))
+
 def parse_django_dataset():
     from lang.py.parse import parse_raw
     from lang.util import escape
     MAX_QUERY_LENGTH = 70
     UNARY_CUTOFF_FREQ = 30
 
-    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
-    code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
+    ##annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+    ##code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
+    #annot_file = ALLANNO
+    #code_file  = ALLCODE
+    annot_file = GENALLANNO
+    code_file  = GENALLCODE
 
-    data = preprocess_dataset(annot_file, code_file)
+    #data = preprocess_dataset(annot_file, code_file)
+    #data = preprocess_gendataset(annot_file, code_file)
+    data = preprocess_syndataset(annot_file, code_file)
 
     for e in data:
         e['parse_tree'] = parse_raw(e['code'])
@@ -389,8 +488,10 @@ def parse_django_dataset():
     # from lang.py.py_dataset import extract_grammar
     # grammar, all_parse_trees = extract_grammar(code_file)
 
+
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
     annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=3) # gen_vocab(annot_tokens, vocab_size=5980)
+    #annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=0) # gen_vocab(annot_tokens, vocab_size=5980)
 
     terminal_token_seq = []
     empty_actions_count = 0
@@ -429,11 +530,14 @@ def parse_django_dataset():
                     terminal_token_seq.append(terminal_token)
 
     terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=5000, freq_cutoff=3)
+    #terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=5000, freq_cutoff=0)
+    phrase_vocab = gen_phrase_vocab(data)
+    pos_vocab    = gen_pos_vocab(data)
     assert '_STR:0_' in terminal_vocab
 
-    train_data = DataSet(annot_vocab, terminal_vocab, grammar, 'train_data')
-    dev_data = DataSet(annot_vocab, terminal_vocab, grammar, 'dev_data')
-    test_data = DataSet(annot_vocab, terminal_vocab, grammar, 'test_data')
+    train_data = DataSet(annot_vocab, terminal_vocab, grammar, 'train_data', phrase_vocab, pos_vocab)
+    dev_data = DataSet(annot_vocab, terminal_vocab, grammar, 'dev_data', phrase_vocab, pos_vocab)
+    test_data = DataSet(annot_vocab, terminal_vocab, grammar, 'test_data', phrase_vocab, pos_vocab)
 
     all_examples = []
 
@@ -448,6 +552,14 @@ def parse_django_dataset():
         parse_tree = entry['parse_tree']
 
         rule_list, rule_parents = parse_tree.get_productions(include_value_node=True)
+
+        #print "Rule List - "
+        #for r in rule_list:
+        #    print "Rule -", r
+
+        #for k, v in rule_parents.iteritems():
+        #    print "Rule parents - ", k, " - ", v
+        #print "Rule parents - ", rule_parents
 
         actions = []
         can_fully_gen = True
@@ -516,7 +628,7 @@ def parse_django_dataset():
             continue
 
         example = DataEntry(idx, query_tokens, parse_tree, code, actions,
-                            {'raw_code': entry['raw_code'], 'str_map': entry['str_map']})
+                {'raw_code': entry['raw_code'], 'str_map': entry['str_map'], 'phrase' : entry['phrase'], 'pos' : entry['pos'] })
 
         if can_fully_gen:
             can_fully_gen_num += 1
@@ -528,6 +640,14 @@ def parse_django_dataset():
             dev_data.add(example)
         else:
             test_data.add(example)
+
+        # modified train valid test counts
+        #if 0 <= idx < 10000:
+        #    train_data.add(example)
+        #elif 10000 <= idx < 11000:
+        #    dev_data.add(example)
+        #else:
+        #    test_data.add(example)
 
         all_examples.append(example)
 
@@ -550,7 +670,9 @@ def parse_django_dataset():
     test_data.init_data_matrices()
 
     serialize_to_file((train_data, dev_data, test_data),
-                      'data/django.cleaned.dataset.freq3.par_info.refact.space_only.order_by_ulink_len.bin')
+                       'data/django.pnet.qparse.dataset.freq3.par_info.refact.space_only.bin')
+                      # 'data/django.pnet.dataset.freq3.par_info.refact.space_only.bin')
+                      #'data/django.cleaned.dataset.freq3.par_info.refact.space_only.order_by_ulink_len.bin')
                       # 'data/django.cleaned.dataset.freq5.par_info.refact.space_only.unary_closure.freq{UNARY_CUTOFF_FREQ}.order_by_ulink_len.bin'.format(UNARY_CUTOFF_FREQ=UNARY_CUTOFF_FREQ))
 
     return train_data, dev_data, test_data
@@ -558,8 +680,11 @@ def parse_django_dataset():
 
 def check_terminals():
     from parse import parse_django, unescape
-    grammar, parse_trees = parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
-    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+    #grammar, parse_trees = parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
+    #annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+
+    grammar, parse_trees = parse_django(ALLCODE)
+    annot_file = ALLANNO
 
     unique_terminals = set()
     invalid_terminals = set()
@@ -599,7 +724,7 @@ def check_terminals():
 
 def query_to_data(query, annot_vocab):
     query_tokens = query.split(' ')
-    token_num = min(config.max_qeury_length, len(query_tokens))
+    token_num = min(config.max_query_length, len(query_tokens))
     data = np.zeros((1, token_num), dtype='int32')
 
     for tid, token in enumerate(query_tokens[:token_num]):
@@ -741,6 +866,246 @@ def process_query(query, code):
 
     return new_query_tokens, code, str_map
 
+def deoneline(txt):
+
+    orig_line = ""
+
+    return txt.replace(" DCNL ", '\n').replace(" DCSP ", '\t')
+
+
+def batch_deep_phrases(queries):
+
+    n = math.ceil(float(len(queries)) / 18.0)
+    n = int(n)
+
+    parts = [ queries[x * n : (x + 1) * n] for x in range(18) ]
+
+    # sum of part lengths
+    pl_sum = 0
+    for part in parts:
+        pl_sum = pl_sum + len(part)
+    assert (len(queries) == pl_sum)
+
+    # Do parsing for every batch
+    qparser = QueryParser()
+
+    result = []
+
+    for part in parts:
+        print "Parsing queries ", parts.index(part) * n, " Onwards - ", len(queries)
+        result = result + QueryParser.deep_phrases(qparser.parser, part)
+
+    assert (len(result) == len(queries))
+
+    return result
+
+def preprocess_gendataset(annot_file, code_file):
+
+    f_annot = open('annot.all.canonicalized.txt', 'w')
+    f_code = open('code.all.canonicalized.txt', 'w')
+
+    # get all queries
+    contents = file_contents(annot_file)
+    examples = contents.split("\n\n")
+    examples = examples[:-1]
+    queries = []
+
+    for ex in examples:
+
+        parts = ex.split("\n")
+        parts = filter(lambda x: x.strip() != "", parts)
+        assert (len(parts) == 2)
+        assert (parts[0].startswith("example"))
+        eid = int(parts[0].split(" ")[1])
+        query = parts[1]
+        queries.append(query)
+
+
+    # get all code
+    contents = file_contents(code_file)
+    examples = contents.split("\n\n")
+    examples = examples[:-1]
+    codes = []
+
+    for ex in examples:
+
+        parts = ex.split("\n")
+        parts = filter(lambda x: x.strip() != "", parts)
+        assert (len(parts) >= 2)
+        assert (parts[0].startswith("example"))
+        eid = int(parts[0].split(" ")[1])
+        code = "\n".join(parts[1:])
+        codes.append(code)
+
+    # deoneline all queries and codes
+    queries = map(lambda q: deoneline(q), queries)
+    codes   = map(lambda c: deoneline(c), codes)
+
+    print "All examples parsed successfully !!"
+
+    examples = []
+
+    err_num = 0
+
+    for idx, (annot, code) in enumerate(zip(queries, codes)):
+
+        annot = annot.strip()
+        code  = code.strip()
+
+        #print "Annotation ", annot
+        #print "Code       ", code
+
+        #c = raw_input("Press to cont")
+
+        try:
+            clean_query_tokens, clean_code, str_map = canonicalize_example(annot, code)
+            example = {'id': idx, 'query_tokens': clean_query_tokens, 'code': clean_code,
+                       'str_map': str_map, 'raw_code': code}
+            examples.append(example)
+
+            f_annot.write('example# %d\n' % idx)
+            f_annot.write(' '.join(clean_query_tokens) + '\n')
+            f_annot.write('%d\n' % len(str_map))
+            for k, v in str_map.iteritems():
+                f_annot.write('%s ||| %s\n' % (k, v))
+
+            f_code.write('example# %d\n' % idx)
+            f_code.write(clean_code + '\n')
+        except Exception, e:
+            print "Exception raised - ", str(e)
+            print "\n\n"
+            print code
+
+            err_num += 1
+
+        idx += 1
+
+    f_annot.close()
+    f_annot.close()
+
+    # serialize_to_file(examples, 'django.cleaned.bin')
+
+    print 'error num: %d' % err_num
+    print 'preprocess_dataset: cleaned example num: %d' % len(examples)
+
+    return examples
+
+def preprocess_syndataset(annot_file, code_file):
+    f_annot = open('annot.all.canonicalized.txt', 'w')
+    f_code = open('code.all.canonicalized.txt', 'w')
+
+    examples = []
+
+    # get all queries
+    contents = file_contents(annot_file)
+    examples = contents.split("\n\n")
+    examples = examples[:-1]
+    annots = []
+
+    for ex in examples:
+
+        parts = ex.split("\n")
+        parts = filter(lambda x: x.strip() != "", parts)
+        assert (len(parts) == 2)
+        assert (parts[0].startswith("example"))
+        eid = int(parts[0].split(" ")[1])
+        query = parts[1]
+        annots.append(query)
+
+
+    # get all code
+    contents = file_contents(code_file)
+    examples = contents.split("\n\n")
+    examples = examples[:-1]
+    codes = []
+
+    for ex in examples:
+
+        parts = ex.split("\n")
+        parts = filter(lambda x: x.strip() != "", parts)
+        assert (len(parts) >= 2)
+        assert (parts[0].startswith("example"))
+        eid = int(parts[0].split(" ")[1])
+        code = "\n".join(parts[1:])
+        codes.append(code)
+
+    # deoneline all queries and codes
+    # annots = map(lambda q: deoneline(q), queries)
+    # codes   = map(lambda c: deoneline(c), codes)
+
+    print "All examples parsed successfully !!"
+
+    examples = []
+
+    err_num = 0
+    sorted_len = []
+    for idx, (annot, code) in enumerate(zip(annots, codes)):
+        annot = annot.strip()
+        code = code.strip()
+
+        try:
+
+            clean_query_tokens, clean_code, str_map = canonicalize_example(annot, code)
+
+            if len(clean_query_tokens) > 150:
+                raise OSERROR # some error :P
+
+            example = {'id': idx, 'query_tokens': clean_query_tokens, 'code': clean_code,
+                    'str_map': str_map, 'raw_code': code}
+            examples.append(example)
+
+        except:
+            print "Exception Raised !! "
+            print clean_query_tokens
+            err_num += 1
+
+        idx += 1
+
+
+    # get all queries
+    queries = []
+    for example in examples:
+        assert(len(example['query_tokens']) <= 150)
+        queries.append(" ".join(example['query_tokens']))
+
+    # get pos information for all the queries
+    phrase_pos = batch_deep_phrases(queries)
+
+    assert (len(queries) == len(phrase_pos))
+
+    for idx, example in enumerate(examples):
+
+        qtokens = phrase_pos[idx][0]
+        phrase  = phrase_pos[idx][1]
+        pos     = phrase_pos[idx][2]
+
+        assert (len(qtokens.split(" ")) == len(phrase) == len(pos))
+
+        # update examples
+        example['query_tokens'] = qtokens.split(" ")
+        example['phrase']       = phrase
+        example['pos']          = pos
+
+        f_annot.write('example# %d\n' % example['id'])
+        f_annot.write(' '.join(example['query_tokens']) + '\n')
+        f_annot.write('%d\n' % len(example['str_map']))
+        for k, v in example['str_map'].iteritems():
+            f_annot.write('%s ||| %s\n' % (k, v))
+
+        f_code.write('example# %d\n' % example['id'])
+        f_code.write(example['code'] + '\n')
+
+
+    f_annot.close()
+    f_annot.close()
+
+    # serialize_to_file(examples, 'django.cleaned.bin')
+
+    print 'error num: %d' % err_num
+    print 'preprocess_dataset: cleaned example num: %d' % len(examples)
+
+    return examples
+
 
 def preprocess_dataset(annot_file, code_file):
     f_annot = open('annot.all.canonicalized.txt', 'w')
@@ -748,15 +1113,64 @@ def preprocess_dataset(annot_file, code_file):
 
     examples = []
 
+    # get all queries
+    contents = file_contents(annot_file)
+    examples = contents.split("\n\n")
+    examples = examples[:-1]
+    annots = []
+
+    for ex in examples:
+
+        parts = ex.split("\n")
+        parts = filter(lambda x: x.strip() != "", parts)
+        assert (len(parts) == 2)
+        assert (parts[0].startswith("example"))
+        eid = int(parts[0].split(" ")[1])
+        query = parts[1]
+        annots.append(query)
+
+
+    # get all code
+    contents = file_contents(code_file)
+    examples = contents.split("\n\n")
+    examples = examples[:-1]
+    codes = []
+
+    for ex in examples:
+
+        parts = ex.split("\n")
+        parts = filter(lambda x: x.strip() != "", parts)
+        assert (len(parts) >= 2)
+        assert (parts[0].startswith("example"))
+        eid = int(parts[0].split(" ")[1])
+        code = "\n".join(parts[1:])
+        codes.append(code)
+
+    annots = annots[:5]
+    codes  = codes[:5]
+
+    # deoneline all queries and codes
+    # annots = map(lambda q: deoneline(q), queries)
+    # codes   = map(lambda c: deoneline(c), codes)
+
+    print "All examples parsed successfully !!"
+
+    examples = []
+
     err_num = 0
-    for idx, (annot, code) in enumerate(zip(open(annot_file), open(code_file))):
+    for idx, (annot, code) in enumerate(zip(annots, codes)):
         annot = annot.strip()
         code = code.strip()
         try:
+
             clean_query_tokens, clean_code, str_map = canonicalize_example(annot, code)
             example = {'id': idx, 'query_tokens': clean_query_tokens, 'code': clean_code,
                        'str_map': str_map, 'raw_code': code}
             examples.append(example)
+
+            print "\n"
+            print " ".join(clean_query_tokens)
+            print annot
 
             f_annot.write('example# %d\n' % idx)
             f_annot.write(' '.join(clean_query_tokens) + '\n')
@@ -781,7 +1195,6 @@ def preprocess_dataset(annot_file, code_file):
     print 'preprocess_dataset: cleaned example num: %d' % len(examples)
 
     return examples
-
 
 if __name__== '__main__':
     from nn.utils.generic_utils import init_logging
