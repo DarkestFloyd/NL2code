@@ -15,12 +15,12 @@ else
 	# django dataset
 	echo "training django dataset"
 	# dataset="django.pnet.qparse.dataset.freq3.par_info.refact.space_only.bin"
-	commandline="-batch_size 10 -max_epoch 50 -valid_per_batch 4000 -save_per_batch 4000 -decode_max_time_step 100 -optimizer adam -rule_embed_dim 128 -node_embed_dim 64 -valid_metric bleu"
+	commandline="-batch_size 10 -max_epoch 50 -valid_per_batch 2 -save_per_batch 4000 -decode_max_time_step 100 -optimizer adam -rule_embed_dim 128 -node_embed_dim 64 -valid_metric bleu"
 	datatype="django"
 fi
 
 # train the model
-THEANO_FLAGS="mode=FAST_RUN,device=${device},floatX=float32,exception_verbosity=high,traceback.limit=20" python -u code_gen.py \
+THEANO_FLAGS="mode=FAST_RUN,device=${device},floatX=float32,traceback.limit=20" python -u code_gen.py \
 	-data_type ${datatype} \
 	-data data/${dataset} \
 	-output_dir ${output} \

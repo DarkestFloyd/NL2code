@@ -228,7 +228,7 @@ class Model:
                                           # [loss, tgt_action_seq_type, tgt_action_seq,
                                           #  rule_tgt_prob, vocab_tgt_prob, copy_tgt_prob,
                                           #  copy_prob, terminal_gen_action_prob],
-                                          updates=updates, allow_input_downcast=True)#, on_unused_input='ignore')
+                                       updates=updates, allow_input_downcast=True)
 
         # if WORD_DROPOUT > 0:
         #     self.build_decoder(query_tokens, query_token_embed_intact, query_token_embed_mask)
