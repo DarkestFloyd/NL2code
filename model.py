@@ -72,11 +72,12 @@ class Model:
         self.srng = RandomStreams()
 
     def concatenate_pos(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
-        transform_op1 = T.shape_padright(query_tokens_phrase)
-        transform_op2 = T.shape_padright(query_tokens_pos)
+        transform = lambda tokens: T.shape_padright(tokens)
 
-        return T.concatenate([query_token_embed, transform_op1,
-            transform_op2], axis=2)
+        # concatenate query_token_embed with query_tokens_phrase and query_tokens_pos,
+        # essentially expanding the embedding to incorporate the new data
+        return T.concatenate([query_token_embed, transform(query_tokens_phrase),
+            transform(query_tokens_pos)], axis=2)
 
     def build(self):
         # (batch_size, max_example_action_num, action_type)
@@ -143,11 +144,6 @@ class Model:
         decoder_input = T.concatenate([tgt_action_seq_embed_tm1, tgt_node_embed, tgt_par_rule_embed], axis=-1)
 
         # concat query_tokens_phrase, query_tokens_pos, and query_token_embed
-        # transform_op1 = T.shape_padright(query_tokens_phrase)
-        # transform_op2 = T.shape_padright(query_tokens_pos)
-
-        # new_query_token_embed = T.concatenate([query_token_embed, transform_op1,
-            # transform_op2], axis=2)
         # (batch_size, max_query_length, query_embed_dim + 2)
         new_query_token_embed = self.concatenate_pos(query_token_embed, query_tokens_phrase,
                 query_tokens_pos)
