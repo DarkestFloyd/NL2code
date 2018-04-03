@@ -71,6 +71,13 @@ class Model:
 
         self.srng = RandomStreams()
 
+    def concatenate_pos(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
+        transform_op1 = T.shape_padright(query_tokens_phrase)
+        transform_op2 = T.shape_padright(query_tokens_pos)
+
+        return T.concatenate([query_token_embed, transform_op1,
+            transform_op2], axis=2)
+
     def build(self):
         # (batch_size, max_example_action_num, action_type)
         tgt_action_seq = ndim_itensor(3, 'tgt_action_seq')
@@ -136,16 +143,15 @@ class Model:
         decoder_input = T.concatenate([tgt_action_seq_embed_tm1, tgt_node_embed, tgt_par_rule_embed], axis=-1)
 
         # concat query_tokens_phrase, query_tokens_pos, and query_token_embed
-        transform_op1 = T.shape_padright(query_tokens_phrase)
-        transform_op2 = T.shape_padright(query_tokens_pos)
+        # transform_op1 = T.shape_padright(query_tokens_phrase)
+        # transform_op2 = T.shape_padright(query_tokens_pos)
 
-        new_query_token_embed = T.concatenate([query_token_embed, transform_op1,
-            transform_op2], axis=2)
-        # new_query_token_embed_mask = T.concatenate([query_token_embed_mask, [1, 1]])
+        # new_query_token_embed = T.concatenate([query_token_embed, transform_op1,
+            # transform_op2], axis=2)
+        new_query_token_embed = self.concatenate_pos(query_token_embed, query_tokens_phrase,
+                query_tokens_pos)
 
         # (batch_size, max_query_length, query_embed_dim)
-        # query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
-                                              # dropout=config.dropout, srng=self.srng)
         query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
                                               dropout=config.dropout, srng=self.srng)
 
@@ -271,6 +277,8 @@ class Model:
 
         # (batch_size, 1)
         parent_t_reshaped = T.shape_padright(parent_t)
+
+        ## TODO concatenate here too
 
         query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
                                               dropout=config.dropout, train=False)
