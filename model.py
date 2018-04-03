@@ -148,6 +148,7 @@ class Model:
 
         # new_query_token_embed = T.concatenate([query_token_embed, transform_op1,
             # transform_op2], axis=2)
+        # (batch_size, max_query_length, query_embed_dim + 2)
         new_query_token_embed = self.concatenate_pos(query_token_embed, query_tokens_phrase,
                 query_tokens_pos)
 
@@ -238,9 +239,11 @@ class Model:
         # else:
         #     self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask)
 
-        self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask)
+        self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask,
+                query_tokens_phrase, query_tokens_pos)
 
-    def build_decoder(self, query_tokens, query_token_embed, query_token_embed_mask):
+    def build_decoder(self, query_tokens, query_token_embed, query_token_embed_mask,
+            query_tokens_phrase, query_tokens_pos):
         logging.info('building decoder ...')
 
         # (batch_size, decoder_state_dim)
@@ -278,9 +281,12 @@ class Model:
         # (batch_size, 1)
         parent_t_reshaped = T.shape_padright(parent_t)
 
-        ## TODO concatenate here too
+        # concatenate query_token_embed with query_tokens_phrase and query_tokens_pos
+        # (batch_size, max_query_length, query_embed_dim + 2)
+        new_query_token_embed = self.concatenate_pos(query_token_embed, query_tokens_phrase,
+                query_tokens_pos)
 
-        query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
+        query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
                                               dropout=config.dropout, train=False)
 
         # (batch_size, 1, decoder_state_dim)
@@ -334,10 +340,11 @@ class Model:
 
         copy_prob = copy_prob.flatten(2)
 
-        inputs = [query_tokens]
+        inputs = [query_tokens, query_tokens_phrase, query_tokens_pos]
         outputs = [query_embed, query_token_embed_mask]
 
-        self.decoder_func_init = theano.function(inputs, outputs)
+        self.decoder_func_init = theano.function(inputs, outputs,
+                allow_input_downcast=True)
 
         inputs = [time_steps, decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
                   node_id, par_rule_id, parent_t,
@@ -357,8 +364,11 @@ class Model:
         rule_embedding = self.rule_embedding_W.get_value(borrow=True)
 
         query_tokens = example.data[0]
+        query_tokens_phrase = example.data[6]
+        query_tokens_pos = example.data[7]
 
-        query_embed, query_token_embed_mask = self.decoder_func_init(query_tokens)
+        query_embed, query_token_embed_mask = self.decoder_func_init(query_tokens,
+                query_tokens_phrase, query_tokens_pos)
 
         completed_hyps = []
         completed_hyp_num = 0
