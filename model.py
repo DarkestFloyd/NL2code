@@ -34,10 +34,10 @@ class Model:
         self.query_embedding = Embedding(config.source_vocab_size, config.word_embed_dim, name='query_embed')
 
         if config.encoder == 'bilstm':
-            self.query_encoder_lstm = BiLSTM(config.word_embed_dim, config.encoder_hidden_dim / 2, return_sequences=True,
+            self.query_encoder_lstm = BiLSTM(config.word_embed_dim + 2, config.encoder_hidden_dim / 2, return_sequences=True,
                                              name='query_encoder_lstm')
         else:
-            self.query_encoder_lstm = LSTM(config.word_embed_dim, config.encoder_hidden_dim, return_sequences=True,
+            self.query_encoder_lstm = LSTM(config.word_embed_dim + 2, config.encoder_hidden_dim, return_sequences=True,
                                            name='query_encoder_lstm')
 
         self.decoder_lstm = CondAttLSTM(config.rule_embed_dim + config.node_embed_dim + config.rule_embed_dim,
@@ -94,6 +94,14 @@ class Model:
         # (batch_size, max_query_length)
         query_tokens = ndim_itensor(2, 'query_tokens')
 
+        # (batch_size, max_query_length)
+        # query_tokens_phrase = ndim_tensor(2, 'query_tokens_phrase')
+        query_tokens_phrase = T.fmatrix('query_tokens_phrase')
+
+        # (batch_size, max_query_length)
+        # query_tokens_pos = ndim_tensor(2, 'query_tokens_pos')
+        query_tokens_pos = T.fmatrix('query_tokens_pos')
+
         # (batch_size, max_query_length, query_token_embed_dim)
         # (batch_size, max_query_length)
         query_token_embed, query_token_embed_mask = self.query_embedding(query_tokens, mask_zero=True)
@@ -127,8 +135,18 @@ class Model:
         # (batch_size, max_example_action_num, action_embed_dim + symbol_embed_dim + action_embed_dim)
         decoder_input = T.concatenate([tgt_action_seq_embed_tm1, tgt_node_embed, tgt_par_rule_embed], axis=-1)
 
+        # concat query_tokens_phrase, query_tokens_pos, and query_token_embed
+        transform_op1 = T.shape_padright(query_tokens_phrase)
+        transform_op2 = T.shape_padright(query_tokens_pos)
+
+        new_query_token_embed = T.concatenate([query_token_embed, transform_op1,
+            transform_op2], axis=2)
+        # new_query_token_embed_mask = T.concatenate([query_token_embed_mask, [1, 1]])
+
         # (batch_size, max_query_length, query_embed_dim)
-        query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
+        # query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
+                                              # dropout=config.dropout, srng=self.srng)
+        query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
                                               dropout=config.dropout, srng=self.srng)
 
         # (batch_size, max_example_action_num)
@@ -198,7 +216,8 @@ class Model:
 
         # let's build the function!
         train_inputs = [query_tokens, tgt_action_seq, tgt_action_seq_type,
-                        tgt_node_seq, tgt_par_rule_seq, tgt_par_t_seq]
+                        tgt_node_seq, tgt_par_rule_seq, tgt_par_t_seq,
+                        query_tokens_phrase, query_tokens_pos]
         optimizer = optimizers.get(config.optimizer)
         optimizer.clip_grad = config.clip_grad
         updates, grads = optimizer.get_updates(self.params, loss)
@@ -206,7 +225,7 @@ class Model:
                                           # [loss, tgt_action_seq_type, tgt_action_seq,
                                           #  rule_tgt_prob, vocab_tgt_prob, copy_tgt_prob,
                                           #  copy_prob, terminal_gen_action_prob],
-                                          updates=updates)
+                                          updates=updates, allow_input_downcast=True)#, on_unused_input='ignore')
 
         # if WORD_DROPOUT > 0:
         #     self.build_decoder(query_tokens, query_token_embed_intact, query_token_embed_mask)
