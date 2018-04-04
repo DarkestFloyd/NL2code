@@ -36,10 +36,10 @@ class Model:
         encoder_dim = config.word_embed_dim
         self.concat_type = 'projection'
         if self.concat_type == 'basic':
-            encoder_dim_extend += 1
+            encoder_dim += 2
         else:
             # define layers
-            some_int = 5
+            some_int = 1000
             self.query_phrase_embeddings = Embedding(some_int, config.word_embed_dim, name='query_phrase_embed')
             self.query_pos_embeddings = Embedding(some_int, config.word_embed_dim, name='query_pos_embed')
             self.projector = Dense(config.word_embed_dim * 3, config.word_embed_dim, activation='linear',
@@ -91,15 +91,15 @@ class Model:
             transform(query_tokens_pos)], axis=2)
 
     def concatenate_projection(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
-        query_phrase_embed = self.query_phrase_embeddings(query_tokens_phrase, mask_zero=False)
-        query_pos_embed = self.query_pos_embeddings(query_pos_phrase, mask_zero=False)
+        query_phrase_embed, _ = self.query_phrase_embeddings(query_tokens_phrase, mask_zero=True)
+        query_pos_embed, _ = self.query_pos_embeddings(query_tokens_pos, mask_zero=True)
 
         augmented_embed = T.concatenate([query_token_embed, query_phrase_embed, query_pos_embed], 
                 axis=-1)
         return self.projector(augmented_embed)
 
     def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
-        if self.concat_type == 'linear':
+        if self.concat_type == 'projection':
             return self.concatenate_projection(query_token_embed, query_tokens_phrase,
                     query_tokens_pos)
         else:
@@ -129,12 +129,12 @@ class Model:
         query_tokens = ndim_itensor(2, 'query_tokens')
 
         # (batch_size, max_query_length)
-        # query_tokens_phrase = ndim_tensor(2, 'query_tokens_phrase')
-        query_tokens_phrase = T.fmatrix('query_tokens_phrase')
+        query_tokens_phrase = ndim_itensor(2, 'query_tokens_phrase')
+        # query_tokens_phrase = T.fmatrix('query_tokens_phrase')
 
         # (batch_size, max_query_length)
-        # query_tokens_pos = ndim_tensor(2, 'query_tokens_pos')
-        query_tokens_pos = T.fmatrix('query_tokens_pos')
+        query_tokens_pos = ndim_itensor(2, 'query_tokens_pos')
+        # query_tokens_pos = T.fmatrix('query_tokens_pos')
 
         # (batch_size, max_query_length, query_token_embed_dim)
         # (batch_size, max_query_length)

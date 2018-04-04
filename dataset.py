@@ -270,8 +270,8 @@ class DataSet:
         # np.max([len(e.rules) for e in self.examples])
 
         query_tokens        = self.data_matrix['query_tokens'] = np.zeros((self.count, max_query_length), dtype='int32')
-        query_tokens_phrase = self.data_matrix['query_tokens_phrase'] = np.zeros((self.count, max_query_length), dtype='float32')
-        query_tokens_pos    = self.data_matrix['query_tokens_pos'] = np.zeros((self.count, max_query_length), dtype='float32')
+        query_tokens_phrase = self.data_matrix['query_tokens_phrase'] = np.zeros((self.count, max_query_length), dtype='int32')
+        query_tokens_pos    = self.data_matrix['query_tokens_pos'] = np.zeros((self.count, max_query_length), dtype='int32')
 
         tgt_node_seq = self.data_matrix['tgt_node_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
         tgt_par_rule_seq = self.data_matrix['tgt_par_rule_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
