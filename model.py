@@ -40,6 +40,18 @@ class Model:
             self.query_encoder_lstm = LSTM(config.word_embed_dim + 2, config.encoder_hidden_dim, return_sequences=True,
                                            name='query_encoder_lstm')
 
+        concat_type = 'projection'
+        if concat_type == 'basic':
+            concat_function = None
+        else:
+            # define layers
+            some_int = 5
+            self.query_phrase_embeddings = Embedding(some_int, config.word_embed_dim, name='query_phrase_embed')
+            self.query_pos_embeddings = Embedding(some_int, config.word_embed_dim, name='query_pos_embed')
+            self.projector = Dense(config.word_embed_dim * 3, config.word_embed_dim, activation='linear',
+                    name='concat_projector')
+            concat_function = None
+
         self.decoder_lstm = CondAttLSTM(config.rule_embed_dim + config.node_embed_dim + config.rule_embed_dim,
                                         config.decoder_hidden_dim, config.encoder_hidden_dim, config.attention_hidden_dim,
                                         name='decoder_lstm')
