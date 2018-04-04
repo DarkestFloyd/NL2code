@@ -5,19 +5,10 @@ output="runs"
 device="cuda"
 dataset="django.pnet.qparse.dataset.freq3.par_info.refact.space_only.bin"
 
-if [ "$1" == "hs" ]; then
-	# hs dataset
-	echo "training hs dataset"
-	dataset="hs.freq3.pre_suf.unary_closure.bin"
-	commandline="-batch_size 10 -max_epoch 1 -valid_per_batch 280 -save_per_batch 280 -decode_max_time_step 350 -optimizer adadelta -rule_embed_dim 128 -node_embed_dim 64 -valid_metric bleu"
-	datatype="hs"
-else
-	# django dataset
-	echo "training django dataset"
-	# dataset="django.pnet.qparse.dataset.freq3.par_info.refact.space_only.bin"
-	commandline="-batch_size 10 -max_epoch 50 -valid_per_batch 2 -save_per_batch 4000 -decode_max_time_step 100 -optimizer adam -rule_embed_dim 128 -node_embed_dim 64 -valid_metric bleu"
-	datatype="django"
-fi
+# django dataset
+echo "training django dataset"
+commandline="-batch_size 10 -max_epoch 50 -valid_per_batch 4000 -save_per_batch 4000 -decode_max_time_step 100 -optimizer adam -rule_embed_dim 128 -node_embed_dim 64 -valid_metric bleu"
+datatype="django"
 
 # train the model
 THEANO_FLAGS="mode=FAST_RUN,device=${device},floatX=float32,traceback.limit=20" python -u code_gen.py \
