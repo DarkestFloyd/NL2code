@@ -4,7 +4,7 @@ import ast
 import traceback
 import argparse
 import os
-import log
+import logging
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-data')
