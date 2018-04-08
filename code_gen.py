@@ -4,20 +4,7 @@ import ast
 import traceback
 import argparse
 import os
-import logging
-from vprof import profiler
-
-from model import Model
-from dataset import DataEntry, DataSet, Vocab, Action
-import config
-from learner import Learner
-from evaluation import *
-from decoder import decode_python_dataset
-from components import Hyp
-from astnode import ASTNode
-
-from nn.utils.generic_utils import init_logging
-from nn.utils.io_utils import deserialize_from_file, serialize_to_file
+import log
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-data')
