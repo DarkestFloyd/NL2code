@@ -1,7 +1,6 @@
 from pytokens import PYKEYWORDS
 
 import ast
-import codegen
 import re
 
 ## TYPES #######################################################################

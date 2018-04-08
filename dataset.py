@@ -13,12 +13,12 @@ import astor
 import math
 import re
 
-from canon_utils import fetch_queries_codes, parsable_code, reproducable_code
-from canonicalization import canonicalize_bunch
-from type_simulation  import TYPES
+# from canon_utils import fetch_queries_codes, parsable_code, reproducable_code
+# from canonicalization import canonicalize_bunch
+# from type_simulation  import TYPES
 
 # import multiprocessing
-import multiprocessing as mp
+# import multiprocessing as mp
 
 from itertools import chain
 

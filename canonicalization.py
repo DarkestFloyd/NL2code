@@ -9,7 +9,7 @@ from type_simulation import guess_types, get_referencables
 from canon_utils import fetch_queries_codes, parsable_code, reproducable_code, give_me_5
 
 import ast
-import codegen
+# import codegen
 import re
 import math
 

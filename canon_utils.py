@@ -2,7 +2,6 @@
 from file_utils import file_contents
 
 import ast
-import codegen
 
 ## Common utilities ############################################################
 
