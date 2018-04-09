@@ -395,6 +395,7 @@ class Model:
         query_tokens = example.data[0]
         query_tokens_phrase = example.data[6]
         query_tokens_pos = example.data[7]
+        query_tokens_canon_id = example.data[8]
 
         query_embed, query_token_embed_mask = self.decoder_func_init(query_tokens,
                 query_tokens_phrase, query_tokens_pos, query_tokens_canon_id)
