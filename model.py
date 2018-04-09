@@ -39,9 +39,9 @@ class Model:
             encoder_dim += 2
         else:
             # define layers
-            self.query_phrase_embedding = Embedding(13, config.word_embed_dim, name='query_phrase_embed')
-            self.query_pos_embedding = Embedding(43, config.word_embed_dim, name='query_pos_embed')
-            self.query_canon_embedding = Embedding(101, config.word_embed_dim, name='query_canon_embedding')
+            self.query_phrase_embedding = Embedding(14, config.word_embed_dim, name='query_phrase_embed')
+            self.query_pos_embedding = Embedding(44, config.word_embed_dim, name='query_pos_embed')
+            self.query_canon_embedding = Embedding(102, config.word_embed_dim, name='query_canon_embedding')
             self.projector = Dense(config.word_embed_dim * 4, config.word_embed_dim, activation='linear',
                     name='concat_projector')
 
@@ -82,7 +82,8 @@ class Model:
 
         self.srng = RandomStreams()
 
-    def concatenate_basic(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
+    def concatenate_basic(self, query_token_embed, query_tokens_phrase, query_tokens_pos,
+            query_tokens_canon_id):
         transform = lambda tokens: T.shape_padright(tokens)
 
         # concatenate query_token_embed with query_tokens_phrase and query_tokens_pos,
@@ -90,7 +91,8 @@ class Model:
         return T.concatenate([query_token_embed, transform(query_tokens_phrase),
             transform(query_tokens_pos)], axis=2)
 
-    def concatenate_projection(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
+    def concatenate_projection(self, query_token_embed, query_tokens_phrase, query_tokens_pos,
+            query_tokens_canon_id):
         query_phrase_embed, _ = self.query_phrase_embedding(query_tokens_phrase, mask_zero=True)
         query_pos_embed, _ = self.query_pos_embedding(query_tokens_pos, mask_zero=True)
         query_canon_embed, _ = self.query_canon_embedding(query_tokens_canon_id, mask_zero=True)
@@ -99,12 +101,13 @@ class Model:
             query_pos_embed, query_canon_embed], axis=-1)
         return self.projector(augmented_embed)
 
-    def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
+    def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos, query_tokens_canon_id):
         if self.concat_type == 'projection':
             return self.concatenate_projection(query_token_embed, query_tokens_phrase,
-                    query_tokens_pos)
+                    query_tokens_pos, query_tokens_canon_id)
         else:
-            return self.concatenate_basic(query_token_embed, query_tokens_phrase, query_tokens_pos)
+            return self.concatenate_basic(query_token_embed, query_tokens_phrase, query_tokens_pos,
+                    query_tokens_canon_id)
 
     def build(self):
         # (batch_size, max_example_action_num, action_type)
