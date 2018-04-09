@@ -397,7 +397,7 @@ class Model:
         query_tokens_pos = example.data[7]
 
         query_embed, query_token_embed_mask = self.decoder_func_init(query_tokens,
-                query_tokens_phrase, query_tokens_pos)
+                query_tokens_phrase, query_tokens_pos, query_tokens_canon_id)
 
         completed_hyps = []
         completed_hyp_num = 0
