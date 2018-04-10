@@ -1,13 +1,15 @@
-# added
+#added
 export MKL_THREADING_LAYER=GNU
 
-output="runs"
-device="cuda"
-dataset="django.pnet.qparse.dataset.freq3.par_info.refact.space_only.bin"
+output="runs/full_canon"
+# rm ${output}/parser.log
+device="cpu"
+dataset="django.pnet.fullcanon.dataset.freq3.par_info.refact.space_only.bin"
 
 # django dataset
 echo "training django dataset"
 commandline="-batch_size 10 -max_epoch 50 -valid_per_batch 4000 -save_per_batch 4000 -decode_max_time_step 100 -optimizer adam -rule_embed_dim 128 -node_embed_dim 64 -valid_metric bleu"
+# -model ./runs/fixed/model.iter16000.npz"
 datatype="django"
 
 # train the model
