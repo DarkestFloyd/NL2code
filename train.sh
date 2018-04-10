@@ -1,10 +1,10 @@
 #added
 export MKL_THREADING_LAYER=GNU
 
-output="runs/full_canon"
+output="runs/full_canon_wocid"
 # rm ${output}/parser.log
 device="cpu"
-dataset="django.pnet.fullcanon.dataset.freq3.par_info.refact.space_only.bin"
+dataset="django.pnet.fullcanon.wocid.dataset.freq3.par_info.refact.space_only.bin"
 
 # django dataset
 echo "training django dataset"
@@ -20,23 +20,22 @@ THEANO_FLAGS="mode=FAST_RUN,device=${device},floatX=float32,traceback.limit=20" 
 	${commandline} \
 	train
 echo "Done training!!"
-# # decode testing set, and evaluate the model which achieves the best bleu and accuracy, resp.
-# for model in "model.best_bleu.npz" "model.best_acc.npz"; do
-# 	THEANO_FLAGS="mode=FAST_RUN,device=${device},floatX=float32,exception_verbosity=high" python code_gen.py \
-# 	-data_type ${datatype} \
-# 	-data data/${dataset} \
-# 	-output_dir ${output} \
-# 	-model ${output}/${model} \
-# 	${commandline} \
-# 	decode \
-# 	-saveto ${output}/${model}.decode_results.test.bin
 
-# 	python code_gen.py \
-# 		-data_type ${datatype} \
-# 		-data data/${dataset} \
-# 		-output_dir ${output} \
-# 		evaluate \
-# 		-input ${output}/${model}.decode_results.test.bin
-# done
+# decode testing set, and evaluate the model which achieves the best bleu and accuracy, resp.
+for model in "model.best_bleu.npz" "model.best_acc.npz"; do
+	THEANO_FLAGS="mode=FAST_RUN,device=${device},floatX=float32,exception_verbosity=high" python code_gen.py \
+	-data_type ${datatype} \
+	-data data/${dataset} \
+	-output_dir ${output} \
+	-model ${output}/${model} \
+	${commandline} \
+	decode \
+	-saveto ${output}/${model}.decode_results.test.bin
 
-# # shutdown now
+	python code_gen.py \
+		-data_type ${datatype} \
+		-data data/${dataset} \
+		-output_dir ${output} \
+		evaluate \
+		-input ${output}/${model}.decode_results.test.bin
+done
