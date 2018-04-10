@@ -206,7 +206,7 @@ class Model:
                                           # [loss, tgt_action_seq_type, tgt_action_seq,
                                           #  rule_tgt_prob, vocab_tgt_prob, copy_tgt_prob,
                                           #  copy_prob, terminal_gen_action_prob],
-                                          updates=updates)
+                                          updates=updates, allow_input_downcast=True)
 
         # if WORD_DROPOUT > 0:
         #     self.build_decoder(query_tokens, query_token_embed_intact, query_token_embed_mask)
@@ -310,7 +310,7 @@ class Model:
         inputs = [query_tokens]
         outputs = [query_embed, query_token_embed_mask]
 
-        self.decoder_func_init = theano.function(inputs, outputs)
+        self.decoder_func_init = theano.function(inputs, outputs, allow_input_downcast=True)
 
         inputs = [time_steps, decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
                   node_id, par_rule_id, parent_t,
