@@ -39,10 +39,10 @@ class Model:
             encoder_dim += 2
         else:
             # define layers
-            self.query_phrase_embedding = Embedding(14, config.word_embed_dim, name='query_phrase_embed')
-            self.query_pos_embedding = Embedding(44, config.word_embed_dim, name='query_pos_embed')
+            self.query_phrase_embedding = Embedding(14, 8, name='query_phrase_embed')
+            self.query_pos_embedding = Embedding(44, 32, name='query_pos_embed')
             # self.query_canon_embedding = Embedding(102, config.word_embed_dim, name='query_canon_embedding')
-            self.projector = Dense(config.word_embed_dim * 3, config.word_embed_dim, activation='linear',
+            self.projector = Dense(config.word_embed_dim + 8 + 32, config.word_embed_dim, activation='linear',
                     name='concat_projector')
 
         if config.encoder == 'bilstm':
