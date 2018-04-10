@@ -33,28 +33,17 @@ class Model:
 
         self.query_embedding = Embedding(config.source_vocab_size, config.word_embed_dim, name='query_embed')
 
-        encoder_dim = config.word_embed_dim
-        self.concat_type = 'projection'
-        if self.concat_type == 'basic':
-            encoder_dim += 2
-        else:
-            # define layers
-            self.query_phrase_embedding = Embedding(14, config.word_embed_dim, name='query_phrase_embed')
-            self.query_pos_embedding = Embedding(44, config.word_embed_dim, name='query_pos_embed')
-            self.query_canon_embedding = Embedding(102, config.word_embed_dim, name='query_canon_embedding')
-            self.projector = Dense(config.word_embed_dim * 4, config.word_embed_dim, activation='linear',
-                    name='concat_projector')
-
         if config.encoder == 'bilstm':
-            self.query_encoder_lstm = BiLSTM(encoder_dim, config.encoder_hidden_dim / 2, 
-                    return_sequences=True, name='query_encoder_lstm')
+            self.query_encoder_lstm = BiLSTM(config.word_embed_dim, config.encoder_hidden_dim / 2, return_sequences=True,
+                                             name='query_encoder_lstm')
         else:
-            self.query_encoder_lstm = LSTM(encoder_dim, config.encoder_hidden_dim, 
-                    return_sequences=True, name='query_encoder_lstm')
+            self.query_encoder_lstm = LSTM(config.word_embed_dim, config.encoder_hidden_dim, return_sequences=True,
+                                           name='query_encoder_lstm')
 
         self.decoder_lstm = CondAttLSTM(config.rule_embed_dim + config.node_embed_dim + config.rule_embed_dim,
                                         config.decoder_hidden_dim, config.encoder_hidden_dim, config.attention_hidden_dim,
                                         name='decoder_lstm')
+
         self.src_ptr_net = PointerNet()
 
         self.terminal_gen_softmax = Dense(config.decoder_hidden_dim, 2, activation='softmax', name='terminal_gen_softmax')
@@ -82,33 +71,6 @@ class Model:
 
         self.srng = RandomStreams()
 
-    def concatenate_basic(self, query_token_embed, query_tokens_phrase, query_tokens_pos,
-            query_tokens_canon_id):
-        transform = lambda tokens: T.shape_padright(tokens)
-
-        # concatenate query_token_embed with query_tokens_phrase and query_tokens_pos,
-        # essentially expanding the embedding to incorporate the new data
-        return T.concatenate([query_token_embed, transform(query_tokens_phrase),
-            transform(query_tokens_pos)], axis=2)
-
-    def concatenate_projection(self, query_token_embed, query_tokens_phrase, query_tokens_pos,
-            query_tokens_canon_id):
-        query_phrase_embed, _ = self.query_phrase_embedding(query_tokens_phrase, mask_zero=True)
-        query_pos_embed, _ = self.query_pos_embedding(query_tokens_pos, mask_zero=True)
-        query_canon_embed, _ = self.query_canon_embedding(query_tokens_canon_id, mask_zero=True)
-
-        augmented_embed = T.concatenate([query_token_embed, query_phrase_embed, 
-            query_pos_embed, query_canon_embed], axis=-1)
-        return self.projector(augmented_embed)
-
-    def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos, query_tokens_canon_id):
-        if self.concat_type == 'projection':
-            return self.concatenate_projection(query_token_embed, query_tokens_phrase,
-                    query_tokens_pos, query_tokens_canon_id)
-        else:
-            return self.concatenate_basic(query_token_embed, query_tokens_phrase, query_tokens_pos,
-                    query_tokens_canon_id)
-
     def build(self):
         # (batch_size, max_example_action_num, action_type)
         tgt_action_seq = ndim_itensor(3, 'tgt_action_seq')
@@ -131,17 +93,6 @@ class Model:
 
         # (batch_size, max_query_length)
         query_tokens = ndim_itensor(2, 'query_tokens')
-
-        # (batch_size, max_query_length)
-        query_tokens_phrase = ndim_itensor(2, 'query_tokens_phrase')
-        # query_tokens_phrase = T.fmatrix('query_tokens_phrase')
-
-        # (batch_size, max_query_length)
-        query_tokens_pos = ndim_itensor(2, 'query_tokens_pos')
-        # query_tokens_pos = T.fmatrix('query_tokens_pos')
-
-        # (batch_size, max_query_length)
-        query_tokens_canon_id = ndim_itensor(2, 'query_tokens_canon_id')
 
         # (batch_size, max_query_length, query_token_embed_dim)
         # (batch_size, max_query_length)
@@ -176,13 +127,8 @@ class Model:
         # (batch_size, max_example_action_num, action_embed_dim + symbol_embed_dim + action_embed_dim)
         decoder_input = T.concatenate([tgt_action_seq_embed_tm1, tgt_node_embed, tgt_par_rule_embed], axis=-1)
 
-        # concat query_tokens_phrase, query_tokens_pos, and query_token_embed
-        # (batch_size, max_query_length, query_embed_dim + 2)
-        new_query_token_embed = self.concatenate(query_token_embed, query_tokens_phrase,
-                query_tokens_pos, query_tokens_canon_id)
-
         # (batch_size, max_query_length, query_embed_dim)
-        query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
+        query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
                                               dropout=config.dropout, srng=self.srng)
 
         # (batch_size, max_example_action_num)
@@ -252,8 +198,7 @@ class Model:
 
         # let's build the function!
         train_inputs = [query_tokens, tgt_action_seq, tgt_action_seq_type,
-                        tgt_node_seq, tgt_par_rule_seq, tgt_par_t_seq,
-                        query_tokens_phrase, query_tokens_pos, query_tokens_canon_id]
+                        tgt_node_seq, tgt_par_rule_seq, tgt_par_t_seq]
         optimizer = optimizers.get(config.optimizer)
         optimizer.clip_grad = config.clip_grad
         updates, grads = optimizer.get_updates(self.params, loss)
@@ -261,18 +206,16 @@ class Model:
                                           # [loss, tgt_action_seq_type, tgt_action_seq,
                                           #  rule_tgt_prob, vocab_tgt_prob, copy_tgt_prob,
                                           #  copy_prob, terminal_gen_action_prob],
-                                       updates=updates, allow_input_downcast=True)
+                                          updates=updates)
 
         # if WORD_DROPOUT > 0:
         #     self.build_decoder(query_tokens, query_token_embed_intact, query_token_embed_mask)
         # else:
         #     self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask)
 
-        self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask,
-                query_tokens_phrase, query_tokens_pos, query_tokens_canon_id)
+        self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask)
 
-    def build_decoder(self, query_tokens, query_token_embed, query_token_embed_mask,
-            query_tokens_phrase, query_tokens_pos, query_tokens_canon_id):
+    def build_decoder(self, query_tokens, query_token_embed, query_token_embed_mask):
         logging.info('building decoder ...')
 
         # (batch_size, decoder_state_dim)
@@ -310,12 +253,7 @@ class Model:
         # (batch_size, 1)
         parent_t_reshaped = T.shape_padright(parent_t)
 
-        # concatenate query_token_embed with query_tokens_phrase and query_tokens_pos
-        # (batch_size, max_query_length, query_embed_dim + 2)
-        new_query_token_embed = self.concatenate(query_token_embed, query_tokens_phrase,
-                query_tokens_pos, query_tokens_canon_id)
-
-        query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
+        query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
                                               dropout=config.dropout, train=False)
 
         # (batch_size, 1, decoder_state_dim)
@@ -369,11 +307,10 @@ class Model:
 
         copy_prob = copy_prob.flatten(2)
 
-        inputs = [query_tokens, query_tokens_phrase, query_tokens_pos, query_tokens_canon_id]
+        inputs = [query_tokens]
         outputs = [query_embed, query_token_embed_mask]
 
-        self.decoder_func_init = theano.function(inputs, outputs,
-                allow_input_downcast=True)
+        self.decoder_func_init = theano.function(inputs, outputs)
 
         inputs = [time_steps, decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
                   node_id, par_rule_id, parent_t,
@@ -393,12 +330,8 @@ class Model:
         rule_embedding = self.rule_embedding_W.get_value(borrow=True)
 
         query_tokens = example.data[0]
-        query_tokens_phrase = example.data[6]
-        query_tokens_pos = example.data[7]
-        query_tokens_canon_id = example.data[8]
 
-        query_embed, query_token_embed_mask = self.decoder_func_init(query_tokens,
-                query_tokens_phrase, query_tokens_pos, query_tokens_canon_id)
+        query_embed, query_token_embed_mask = self.decoder_func_init(query_tokens)
 
         completed_hyps = []
         completed_hyp_num = 0
