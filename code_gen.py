@@ -190,7 +190,7 @@ if __name__ == '__main__':
             decode_results_file = args.input
             decode_results = deserialize_from_file(decode_results_file)
 
-            evaluate_decode_results(dataset, decode_results)
+            evaluate_decode_results(dataset, decode_results, verbose=False)
         elif config.mode == 'seq2tree':
             from evaluation import evaluate_seq2tree_sample_file
             evaluate_seq2tree_sample_file(config.seq2tree_sample_file, config.seq2tree_id_file, dataset)
