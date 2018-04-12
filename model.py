@@ -34,8 +34,8 @@ class Model:
         self.query_embedding = Embedding(config.source_vocab_size, config.word_embed_dim, name='query_embed')
 
         encoder_dim = config.word_embed_dim
-        self.concat_type = 'projection'
-        if self.concat_type == 'basic':
+        logging.info("Concatenation type: %s" % config.concat_type)
+        if config.concat_type == 'basic':
             encoder_dim += 2
         else:
             # define layers
@@ -103,7 +103,7 @@ class Model:
 
     def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
             # query_tokens_canon_id):
-        if self.concat_type == 'projection':
+        if config.concat_type == 'projection':
             return self.concatenate_projection(query_token_embed, query_tokens_phrase,
                     query_tokens_pos)#, query_tokens_canon_id)
         else:
@@ -133,13 +133,16 @@ class Model:
         # (batch_size, max_query_length)
         query_tokens = ndim_itensor(2, 'query_tokens')
 
-        # (batch_size, max_query_length)
-        query_tokens_phrase = ndim_itensor(2, 'query_tokens_phrase')
-        # query_tokens_phrase = T.fmatrix('query_tokens_phrase')
-
-        # (batch_size, max_query_length)
-        query_tokens_pos = ndim_itensor(2, 'query_tokens_pos')
-        # query_tokens_pos = T.fmatrix('query_tokens_pos')
+        if config.concat_type == 'basic':
+            # (batch_size, max_query_length)
+            query_tokens_phrase = T.fmatrix('query_tokens_phrase')
+            # (batch_size, max_query_length)
+            query_tokens_pos = T.fmatrix('query_tokens_pos')
+        else:
+            # (batch_size, max_query_length)
+            query_tokens_pos = ndim_itensor(2, 'query_tokens_pos')
+            # (batch_size, max_query_length)
+            query_tokens_phrase = ndim_itensor(2, 'query_tokens_phrase')
 
         # (batch_size, max_query_length)
         # query_tokens_canon_id = ndim_itensor(2, 'query_tokens_canon_id')
@@ -373,8 +376,7 @@ class Model:
         inputs = [query_tokens, query_tokens_phrase, query_tokens_pos]#, query_tokens_canon_id]
         outputs = [query_embed, query_token_embed_mask]
 
-        self.decoder_func_init = theano.function(inputs, outputs,
-                allow_input_downcast=True)
+        self.decoder_func_init = theano.function(inputs, outputs, allow_input_downcast=True)
 
         inputs = [time_steps, decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
                   node_id, par_rule_id, parent_t,
