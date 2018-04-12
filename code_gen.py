@@ -26,6 +26,7 @@ parser.add_argument('-output_dir', default='.outputs')
 parser.add_argument('-model', default=None)
 
 parser.add_argument('-concat_type', default='projection', choices=['projection', 'basic'])
+parser.add_argument('-include_cid', default=False)
 
 # model's main configuration
 parser.add_argument('-data_type', default='django', choices=['django', 'ifttt', 'hs'])
