@@ -25,7 +25,7 @@ parser.add_argument('-random_seed', default=181783, type=int)
 parser.add_argument('-output_dir', default='.outputs')
 parser.add_argument('-model', default=None)
 
-parser.add_argument('-concat_type', default='projection', choices=['projection', 'basic'])
+parser.add_argument('-concat_type', default='projection', choices=['projection', 'basic', 'advanced'])
 parser.add_argument('-include_cid', default=False)
 
 # model's main configuration

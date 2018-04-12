@@ -37,22 +37,22 @@ class Model:
         logging.info("Concatenation type: %s" % config.concat_type)
         logging.info("Include canon_id matrix: %s" % config.include_cid)
         if config.concat_type == 'basic':
-            encoder_dim += 2
-            if config.include_cid == True:
-                encoder_dim += 1
+            encoder_dim += 2 ## TODO handle later
         else:
             # define layers
             self.query_phrase_embedding = Embedding(14, 8, name='query_phrase_embed')
             self.query_pos_embedding = Embedding(44, 32, name='query_pos_embed')
-            self.query_canon_embedding = Embedding(102, 64, name='query_canon_embedding')
             aug_dim = 8 + 32
-            if config.include_cid == True:
-                aug_dim += 64
-            self.projector = Dense(config.word_embed_dim + aug_dim, config.word_embed_dim, activation='linear',
-                    name='concat_projector')
+            if config.concat_type == 'advanced':
+                self.preprojector = Dense(aug_dim, 16, activation='linear', name='preprojector')
+                self.projector = Dense(config.word_embed_dim + 16, config.word_embed_dim, activation='linear',
+                        name='concat_projector')
+            else:
+                self.projector = Dense(config.word_embed_dim + aug_dim, config.word_embed_dim, activation='linear',
+                        name='concat_projector')
 
         if config.encoder == 'bilstm':
-            self.query_encoder_lstm = BiLSTM(encoder_dim, config.encoder_hidden_dim / 2, 
+            self.query_encoder_lstm = BiLSTM(config.word_embed_dim, config.encoder_hidden_dim / 2, 
                     return_sequences=True, name='query_encoder_lstm')
         else:
             self.query_encoder_lstm = LSTM(encoder_dim, config.encoder_hidden_dim, 
@@ -88,42 +88,37 @@ class Model:
 
         self.srng = RandomStreams()
 
-    def concatenate_basic(self, query_token_embed, query_tokens_phrase, query_tokens_pos, 
-            query_tokens_canon_id):
+    def concatenate_basic(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
+            # query_tokens_canon_id):
         transform = lambda tokens: T.shape_padright(tokens)
 
         # concatenate query_token_embed with query_tokens_phrase and query_tokens_pos,
         # essentially expanding the embedding to incorporate the new data
-        if config.include_cid == True:
-            return T.concatenate([query_token_embed, transform(query_tokens_phrase),
-                transform(query_tokens_pos), transform(query_tokens_canon_id)], axis=2)
-        else:
-            return T.concatenate([query_token_embed, transform(query_tokens_phrase),
-                transform(query_tokens_pos)], axis=2)
+        return T.concatenate([query_token_embed, transform(query_tokens_phrase),
+            transform(query_tokens_pos)], axis=2)
 
-    def concatenate_projection(self, query_token_embed, query_tokens_phrase, query_tokens_pos,
-            query_tokens_canon_id):
-        query_phrase_embed, _ = self.query_phrase_embedding(query_tokens_phrase, mask_zero=True)
-        query_pos_embed, _ = self.query_pos_embedding(query_tokens_pos, mask_zero=True)
-        query_canon_embed, _ = self.query_canon_embedding(query_tokens_canon_id, mask_zero=True)
+    def concatenate_projection(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
+            # query_tokens_canon_id):
+        query_phrase_embed = self.query_phrase_embedding(query_tokens_phrase)
+        query_pos_embed = self.query_pos_embedding(query_tokens_pos)
 
-        if config.include_cid == True:
-            augmented_embed = T.concatenate([query_token_embed, query_phrase_embed, 
-                query_pos_embed, query_canon_embed], axis=-1)
+        if config.concat_type == 'advanced':
+            preprojecter_input = T.concatenate([query_phrase_embed, query_pos_embed], axis=-1)
+            preprojector_embed = self.preprojector(preprojecter_input)
+            augmented_embed = T.concatenate([query_token_embed, preprojector_embed], axis=-1)
         else:
             augmented_embed = T.concatenate([query_token_embed, query_phrase_embed, 
                 query_pos_embed], axis=-1)
 
         return self.projector(augmented_embed)
 
-    def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos,
-            query_tokens_canon_id):
+    def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
         if config.concat_type == 'projection':
             return self.concatenate_projection(query_token_embed, query_tokens_phrase,
-                    query_tokens_pos, query_tokens_canon_id)
+                    query_tokens_pos)#, query_tokens_canon_id)
         else:
-            return self.concatenate_basic(query_token_embed, query_tokens_phrase, query_tokens_pos,
-                    query_tokens_canon_id)
+            return self.concatenate_basic(query_token_embed, query_tokens_phrase, query_tokens_pos)
+                    # query_tokens_canon_id)
 
     def build(self):
         # (batch_size, max_example_action_num, action_type)
@@ -148,21 +143,21 @@ class Model:
         # (batch_size, max_query_length)
         query_tokens = ndim_itensor(2, 'query_tokens')
 
-        if config.concat_type == 'basic':
-            # (batch_size, max_query_length)
-            query_tokens_phrase = T.fmatrix('query_tokens_phrase')
-            # (batch_size, max_query_length)
-            query_tokens_pos = T.fmatrix('query_tokens_pos')
-            # (batch_size, max_query_length)
-            query_tokens_canon_id = T.fmatrix('query_tokens_cid')
+        # if config.concat_type == 'basic':
+        # (batch_size, max_query_length)
+        query_tokens_phrase = T.fmatrix('query_tokens_phrase')
+        # (batch_size, max_query_length)
+        query_tokens_pos = T.fmatrix('query_tokens_pos')
+        # (batch_size, max_query_length)
+        # query_tokens_canon_id = T.fmatrix('query_tokens_cid')
 
-        else:
-            # (batch_size, max_query_length)
-            query_tokens_phrase = ndim_itensor(2, 'query_tokens_phrase')
-            # (batch_size, max_query_length)
-            query_tokens_pos = ndim_itensor(2, 'query_tokens_pos')
-            # (batch_size, max_query_length)
-            query_tokens_canon_id = ndim_itensor(2, 'query_tokens_cid')
+        # else:
+        # (batch_size, max_query_length)
+        # query_tokens_phrase = ndim_itensor(2, 'query_tokens_phrase')
+        # (batch_size, max_query_length)
+        # query_tokens_pos = ndim_itensor(2, 'query_tokens_pos')
+        # (batch_size, max_query_length)
+        # query_tokens_canon_id = ndim_itensor(2, 'query_tokens_cid')
 
         # (batch_size, max_query_length, query_token_embed_dim)
         # (batch_size, max_query_length)
@@ -171,6 +166,15 @@ class Model:
         # if WORD_DROPOUT > 0:
         #     logging.info('used word dropout for source, p = %f', WORD_DROPOUT)
         #     query_token_embed, query_token_embed_intact = WordDropout(WORD_DROPOUT, self.srng)(query_token_embed, False)
+
+        # concat query_tokens_phrase, query_tokens_pos, and query_token_embed
+        # (batch_size, max_query_length, query_embed_dim + (2 (basic concat) or 16 (projection)))
+        new_query_token_embed = self.concatenate(query_token_embed, query_tokens_phrase,
+                query_tokens_pos)#, query_tokens_canon_id)
+
+        # (batch_size, max_query_length, query_embed_dim)
+        query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
+                                              dropout=config.dropout, srng=self.srng)
 
         batch_size = tgt_action_seq.shape[0]
         max_example_action_num = tgt_action_seq.shape[1]
@@ -196,15 +200,6 @@ class Model:
 
         # (batch_size, max_example_action_num, action_embed_dim + symbol_embed_dim + action_embed_dim)
         decoder_input = T.concatenate([tgt_action_seq_embed_tm1, tgt_node_embed, tgt_par_rule_embed], axis=-1)
-
-        # concat query_tokens_phrase, query_tokens_pos, and query_token_embed
-        # (batch_size, max_query_length, query_embed_dim + 2)
-        new_query_token_embed = self.concatenate(query_token_embed, query_tokens_phrase,
-                query_tokens_pos, query_tokens_canon_id)
-
-        # (batch_size, max_query_length, query_embed_dim)
-        query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
-                                              dropout=config.dropout, srng=self.srng)
 
         # (batch_size, max_example_action_num)
         tgt_action_seq_mask = T.any(tgt_action_seq_type, axis=-1)
@@ -282,19 +277,18 @@ class Model:
                                           # [loss, tgt_action_seq_type, tgt_action_seq,
                                           #  rule_tgt_prob, vocab_tgt_prob, copy_tgt_prob,
                                           #  copy_prob, terminal_gen_action_prob],
-                                       updates=updates, allow_input_downcast=True, 
-                                       on_unused_input='ignore')
+                                       updates=updates, allow_input_downcast=True)
 
         # if WORD_DROPOUT > 0:
         #     self.build_decoder(query_tokens, query_token_embed_intact, query_token_embed_mask)
         # else:
         #     self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask)
 
-        self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask,
-                query_tokens_phrase, query_tokens_pos, query_tokens_canon_id)
+        self.build_decoder(query_tokens, new_query_token_embed, query_token_embed_mask,
+                query_tokens_phrase, query_tokens_pos)
 
-    def build_decoder(self, query_tokens, query_token_embed, query_token_embed_mask,
-            query_tokens_phrase, query_tokens_pos, query_tokens_canon_id):
+    def build_decoder(self, query_tokens, new_query_token_embed, query_token_embed_mask,
+            query_tokens_phrase, query_tokens_pos):
         logging.info('building decoder ...')
 
         # (batch_size, decoder_state_dim)
@@ -334,8 +328,8 @@ class Model:
 
         # concatenate query_token_embed with query_tokens_phrase and query_tokens_pos
         # (batch_size, max_query_length, query_embed_dim + 2)
-        new_query_token_embed = self.concatenate(query_token_embed, query_tokens_phrase,
-                query_tokens_pos, query_tokens_canon_id)
+        # new_query_token_embed = self.concatenate(query_token_embed, query_tokens_phrase,
+                # query_tokens_pos)#, query_tokens_canon_id)
 
         query_embed = self.query_encoder_lstm(new_query_token_embed, mask=query_token_embed_mask,
                                               dropout=config.dropout, train=False)
@@ -391,11 +385,11 @@ class Model:
 
         copy_prob = copy_prob.flatten(2)
 
-        inputs = [query_tokens, query_tokens_phrase, query_tokens_pos, query_tokens_canon_id]
+        inputs = [query_tokens, query_tokens_phrase, query_tokens_pos]#, query_tokens_canon_id]
         outputs = [query_embed, query_token_embed_mask]
 
         self.decoder_func_init = theano.function(inputs, outputs, allow_input_downcast=True,
-                on_unused_input='ignore')
+                # on_unused_input='ignore')
 
         inputs = [time_steps, decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
                   node_id, par_rule_id, parent_t,
@@ -417,10 +411,9 @@ class Model:
         query_tokens = example.data[0]
         query_tokens_phrase = example.data[6]
         query_tokens_pos = example.data[7]
-        query_tokens_canon_id = example.data[8]
 
         query_embed, query_token_embed_mask = self.decoder_func_init(query_tokens,
-                query_tokens_phrase, query_tokens_pos, query_tokens_canon_id)
+                query_tokens_phrase, query_tokens_pos)#, query_tokens_canon_id)
 
         completed_hyps = []
         completed_hyp_num = 0

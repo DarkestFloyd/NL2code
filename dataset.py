@@ -309,7 +309,7 @@ class DataSet:
         query_tokens        = self.data_matrix['query_tokens'] = np.zeros((self.count, max_query_length), dtype='int32')
         query_tokens_phrase = self.data_matrix['query_tokens_phrase'] = np.zeros((self.count, max_query_length), dtype='int32')
         query_tokens_pos    = self.data_matrix['query_tokens_pos'] = np.zeros((self.count, max_query_length), dtype='int32')
-        query_tokens_cid = self.data_matrix['query_tokens_cid'] = np.zeros((self.count, max_query_length), dtype='int32')
+        # query_tokens_cid = self.data_matrix['query_tokens_cid'] = np.zeros((self.count, max_query_length), dtype='int32')
 
         tgt_node_seq = self.data_matrix['tgt_node_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
         tgt_par_rule_seq = self.data_matrix['tgt_par_rule_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
@@ -327,16 +327,16 @@ class DataSet:
                 token_id = annot_vocab[token]
                 query_tokens[eid, tid] = token_id
 
-            for tid, token in enumerate(exg_query_tokens):
-                # if the token contains some _[0-9], thats the canon id
-                res = re.findall(r"_([0-9]+)", token)
-                # id
-                cid = 0
-                if len(res) == 1:
-                    cid = int(res[0]) + 1
-                #print token, " 's cid ", cid
-                # we got the cid
-                query_tokens_cid[eid, tid] = cid
+            #for tid, token in enumerate(exg_query_tokens):
+            #    # if the token contains some _[0-9], thats the canon id
+            #    res = re.findall(r"_([0-9]+)", token)
+            #    # id
+            #    cid = 0
+            #    if len(res) == 1:
+            #        cid = int(res[0]) + 1
+            #    #print token, " 's cid ", cid
+            #    # we got the cid
+            #    query_tokens_cid[eid, tid] = cid
 
             for tid, p in enumerate(exg_query_tokens_phrase):
                 assert (phrase_vocab_uid.get(p) is not None)
