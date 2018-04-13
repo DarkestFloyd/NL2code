@@ -72,9 +72,9 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         f_decode = open(dataset.name + '.decode_results.txt', 'w')
         eid_to_annot = dict()
 
-        if config.data_type == 'django':
-            for raw_id, line in enumerate(open(DJANGO_ANNOT_FILE)):
-                eid_to_annot[raw_id] = line.strip()
+        # if config.data_type == 'django':
+            # for raw_id, line in enumerate(open(DJANGO_ANNOT_FILE)):
+                # eid_to_annot[raw_id] = line.strip()
 
         f_bleu_eval_ref = open(dataset.name + '.ref', 'w')
         f_bleu_eval_hyp = open(dataset.name + '.hyp', 'w')
@@ -180,7 +180,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             f_decode.write('intent: \n')
 
             if config.data_type == 'django':
-                f_decode.write(eid_to_annot[example.raw_id] + '\n')
+                f_decode.write(' '.join(example.query) + '\n')
             elif config.data_type == 'hs':
                 f_decode.write(' '.join(example.query) + '\n')
 
@@ -276,9 +276,9 @@ def analyze_decode_results(dataset, decode_results, verbose=True):
         f_decode = open(dataset.name + '.decode_results.txt', 'w')
         eid_to_annot = dict()
 
-        if config.data_type == 'django':
-            for raw_id, line in enumerate(open(DJANGO_ANNOT_FILE)):
-                eid_to_annot[raw_id] = line.strip()
+        # if config.data_type == 'django':
+            # for raw_id, line in enumerate(open(DJANGO_ANNOT_FILE)):
+                # eid_to_annot[raw_id] = line.strip()
 
         f_bleu_eval_ref = open(dataset.name + '.ref', 'w')
         f_bleu_eval_hyp = open(dataset.name + '.hyp', 'w')

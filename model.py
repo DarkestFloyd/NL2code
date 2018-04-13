@@ -108,11 +108,11 @@ class Model:
         return self.projector(augmented_embed)
 
     def concatenate(self, query_token_embed, query_tokens_phrase, query_tokens_pos):
-        if config.concat_type == 'projection':
-            return self.concatenate_projection(query_token_embed, query_tokens_phrase,
+        if config.concat_type == 'basic':
+            return self.concatenate_basic(query_token_embed, query_tokens_phrase,
                     query_tokens_pos)#, query_tokens_canon_id)
         else:
-            return self.concatenate_basic(query_token_embed, query_tokens_phrase, query_tokens_pos)
+            return self.concatenate_projection(query_token_embed, query_tokens_phrase, query_tokens_pos)
                     # query_tokens_canon_id)
 
     def build(self):
@@ -140,9 +140,9 @@ class Model:
 
         # if config.concat_type == 'basic':
         # (batch_size, max_query_length)
-        query_tokens_phrase = T.fmatrix('query_tokens_phrase')
+        query_tokens_phrase = ndim_itensor('query_tokens_phrase')
         # (batch_size, max_query_length)
-        query_tokens_pos = T.fmatrix('query_tokens_pos')
+        query_tokens_pos = ndim_itensor('query_tokens_pos')
         # (batch_size, max_query_length)
         # query_tokens_canon_id = T.fmatrix('query_tokens_cid')
 
