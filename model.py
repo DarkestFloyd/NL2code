@@ -33,29 +33,24 @@ class Model:
 
         self.query_embedding = Embedding(config.source_vocab_size, config.word_embed_dim, name='query_embed')
 
-        encoder_dim = config.word_embed_dim
         logging.info("Concatenation type: %s" % config.concat_type)
         logging.info("Include canon_id matrix: %s" % config.include_cid)
-        if config.concat_type == 'basic':
-            encoder_dim += 2 ## TODO handle later
-        else:
             # define layers
-            self.query_phrase_embedding = Embedding(14, 8, name='query_phrase_embed')
-            self.query_pos_embedding = Embedding(44, 32, name='query_pos_embed')
-            aug_dim = 8 + 32
-            if config.concat_type == 'advanced':
-                self.preprojector = Dense(aug_dim, 16, activation='linear', name='preprojector')
-                self.projector = Dense(config.word_embed_dim + 16, config.word_embed_dim, activation='linear',
-                        name='concat_projector')
-            else:
-                self.projector = Dense(config.word_embed_dim + aug_dim, config.word_embed_dim, activation='linear',
-                        name='concat_projector')
+        self.query_phrase_embedding = Embedding(14, 8, name='query_phrase_embed')
+        self.query_pos_embedding = Embedding(44, 32, name='query_pos_embed')
+        if config.concat_type == 'advanced':
+            self.preprojector = Dense(8 + 32, 16, activation='linear', name='preprojector')
+            self.projector = Dense(config.word_embed_dim + 16, config.word_embed_dim, activation='linear',
+                    name='concat_projector')
+            # else:
+                # self.projector = Dense(config.word_embed_dim + aug_dim, config.word_embed_dim, activation='linear',
+                        # name='concat_projector')
 
         if config.encoder == 'bilstm':
             self.query_encoder_lstm = BiLSTM(config.word_embed_dim, config.encoder_hidden_dim / 2, 
                     return_sequences=True, name='query_encoder_lstm')
         else:
-            self.query_encoder_lstm = LSTM(encoder_dim, config.encoder_hidden_dim, 
+            self.query_encoder_lstm = LSTM(config.word_embed_dim, config.encoder_hidden_dim, 
                     return_sequences=True, name='query_encoder_lstm')
 
         self.decoder_lstm = CondAttLSTM(config.rule_embed_dim + config.node_embed_dim + config.rule_embed_dim,
@@ -388,7 +383,7 @@ class Model:
         inputs = [query_tokens, query_tokens_phrase, query_tokens_pos]#, query_tokens_canon_id]
         outputs = [query_embed, query_token_embed_mask]
 
-        self.decoder_func_init = theano.function(inputs, outputs, allow_input_downcast=True,
+        self.decoder_func_init = theano.function(inputs, outputs, allow_input_downcast=True)
                 # on_unused_input='ignore')
 
         inputs = [time_steps, decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
